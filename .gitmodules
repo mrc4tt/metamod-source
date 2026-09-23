@@ -6,4 +6,4 @@
 	url = https://github.com/alliedmodders/hl2sdk-manifests
 [submodule "third_party/khook"]
 	path = third_party/khook
-	url = https://github.com/Kenzzer/KHook
+	url = https://github.com/mrc4tt/KHook
