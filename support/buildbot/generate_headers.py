@@ -39,6 +39,12 @@ def run_and_return(argv):
   return text.strip()
 
 def get_git_version():
+  # Builds that cannot run git themselves (e.g. Windows Python under Wine in
+  # support/local-release.sh) pass the values in from the host checkout.
+  if 'MMS_GIT_REVISION_COUNT' in os.environ:
+    return (os.environ['MMS_GIT_REVISION_COUNT'], os.environ['MMS_GIT_SHORTHASH'],
+            os.environ['MMS_GIT_LONGHASH'])
+
   revision_count = run_and_return(['git', 'rev-list', '--count', 'HEAD'])
   revision_hash = run_and_return(['git', 'log', '--pretty=format:%h:%H', '-n', '1'])
   shorthash, longhash = revision_hash.split(':')
