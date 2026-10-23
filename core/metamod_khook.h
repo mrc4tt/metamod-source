@@ -46,7 +46,7 @@ public:
 		unsigned int stack_size, 
 		bool async = false
 	) override {
-		return KHook::SetupHook(
+		auto id = KHook::SetupHook(
 			function,
 			context,
 			removed_function,
@@ -57,6 +57,10 @@ public:
 			stack_size,
 			async
 		);
+		if (id != KHook::INVALID_HOOK) {
+			m_hooks.insert(id);
+		}
+		return id;
 	}
 	virtual KHook::HookID_t SetupVirtualHook(
 		void** vtable,

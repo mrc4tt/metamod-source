@@ -44,22 +44,26 @@
 using namespace SourceMM;
 
 struct Unloader {
-	Unloader(HINSTANCE module, std::set<KHook::HookID_t> hooks) : _lib(module) {
-		_hooks = hooks;
-
+	Unloader(HINSTANCE module, KHookImpl* khook) : _khook(khook), _lib(module) {
 		// Add invalid hook, so it doesn't delete the class early
-		_hooks.insert(KHook::INVALID_HOOK);
+		_khook->m_hooks.insert(KHook::INVALID_HOOK);
 
-		for (auto id : hooks) {
-			KHook::RemoveHook(id, true, reinterpret_cast<void(*)(KHook::HookID_t,void*)>(&Unloader::HookRemoval), this);
+		for (auto id : _khook->m_hooks) {
+			if (id != KHook::INVALID_HOOK) {
+				KHook::RemoveHook(id, true, reinterpret_cast<void(*)(KHook::HookID_t,void*)>(&Unloader::HookRemoval), this);
+			}
 		}
+	}
+
+	~Unloader() {
+		delete _khook;
 	}
 
 	void Check() {
 		_mutex.lock();
 
-		_hooks.erase(KHook::INVALID_HOOK);
-		auto size = _hooks.size();
+		_khook->m_hooks.erase(KHook::INVALID_HOOK);
+		auto size = _khook->m_hooks.size();
 
 		_mutex.unlock();
 
@@ -72,9 +76,9 @@ struct Unloader {
 private:
 	static void HookRemoval(KHook::HookID_t id, Unloader* context) {
 		context->_mutex.lock();
-		context->_hooks.erase(id);
+		context->_khook->m_hooks.erase(id);
 
-		auto size = context->_hooks.size();
+		auto size = context->_khook->m_hooks.size();
 		context->_mutex.unlock();
 
 		if (size == 0) {
@@ -84,7 +88,7 @@ private:
 	}
 
 	std::mutex _mutex;
-	std::set<KHook::HookID_t> _hooks;
+	KHookImpl *_khook;
 	HINSTANCE _lib;
 };
 
@@ -193,14 +197,19 @@ void CPluginManager::SetAlias(const char *alias, const char *value)
 	}
 }
 
-CPluginManager::CPlugin::CPlugin() : m_Id(0), m_Source(0), m_API(NULL), m_Lib(NULL), m_UnloadFn(NULL)
+CPluginManager::CPlugin::CPlugin() : m_Id(0), m_Source(0), m_API(NULL), m_Lib(NULL), m_UnloadFn(NULL), m_khook(new KHookImpl)
 {
 
 }
 
 CPluginManager::CPlugin::~CPlugin()
 {
-	auto unloader = new Unloader(m_Lib, std::move(m_khook.m_hooks));
+	if (!m_Lib)
+	{
+		delete m_khook;
+		return;
+	}
+	auto unloader = new Unloader(m_Lib, m_khook);
 	unloader->Check();
 }
 

@@ -34,7 +34,9 @@
  */
 
 #include "interface.h"
+#if !defined META_IS_SOURCE2
 #include "eiface.h"
+#endif
 #include "ISmmAPI.h"
 #include "IPluginManager.h"
 #include "ISmmPluginExt.h"
@@ -99,7 +101,7 @@ public:
 		std::list<ProviderConCommand *> m_Cmds;
 		std::list<IMetamodListener *> m_Events;
 		METAMOD_FN_UNLOAD m_UnloadFn;
-		KHookImpl m_khook;
+		KHookImpl *m_khook;
 	};
 public:
 	CPluginManager();

@@ -29,7 +29,9 @@
 #include "metamod_oslink.h"
 #include "metamod.h"
 #include "interface.h"
+#if !defined META_IS_SOURCE2
 #include "eiface.h"
+#endif
 #include "metamod_version.h"
 #include "metamod_provider.h"
 #include "metamod_plugins.h"
@@ -1077,7 +1079,7 @@ size_t MetamodSource::FormatArgs(char *buffer, size_t maxlength, const char *for
 }
 
 void* MetamodSource::GetDetourInterface(PluginId id) {
-	return static_cast<::KHook::IKHook*>(&(g_PluginMngr.FindById(id)->m_khook));
+	return static_cast<::KHook::IKHook*>(g_PluginMngr.FindById(id)->m_khook);
 }
 
 bool MetamodSource::IsLoadedAsGameDLL()
