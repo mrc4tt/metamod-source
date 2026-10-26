@@ -31,8 +31,13 @@ for sdk_target in MMS.sdk_targets:
     binary.sources += [
       'provider/source2/provider_source2.cpp',
     ]
+    # The SDK headers include networkbasetypes.pb.h, which pulls in the other two.
     binary.custom = [builder.tools.Protoc(protoc = sdk_target.protoc, sources = [
-      os.path.join(sdk['path'], 'common', 'network_connection.proto'),
+      os.path.join(sdk['path'], 'common', proto) for proto in [
+        'network_connection.proto',
+        'networkbasetypes.proto',
+        'valveextensions.proto',
+      ]
     ])]
   else:
     binary.sources += [
