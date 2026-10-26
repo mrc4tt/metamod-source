@@ -3,9 +3,11 @@
 # Linux and Windows in Docker on this machine and, with --upload, publishes the
 # packages to this fork's GitHub releases.
 #
-# Usage: support/local-release.sh [--upload] [--clobber] [--targets linux,windows] [--sdks cs2]
+# Usage: support/local-release.sh [--upload|--dry-run] [--clobber] [--targets linux,windows] [--sdks cs2]
 #
-#   --upload    create/update the GitHub release for this version and attach the packages
+#   --upload    create/update the GitHub release for this version and attach the packages;
+#               does nothing when that release already has every package
+#   --dry-run   like --upload, but only builds and prints what would be released
 #   --clobber   with --upload, replace assets that already exist on the release
 #   --targets   comma list of linux,windows (default: both)
 #   --sdks      comma list for configure.py --sdks (default: cs2)
@@ -19,16 +21,18 @@
 set -euo pipefail
 
 UPLOAD=0
+DRY_RUN=0
 CLOBBER=0
 TARGETS="linux,windows"
 SDKS="cs2"
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--upload)  UPLOAD=1 ;;
+		--dry-run) UPLOAD=1; DRY_RUN=1 ;;
 		--clobber) CLOBBER=1 ;;
 		--targets) TARGETS="$2"; shift ;;
 		--sdks)    SDKS="$2"; shift ;;
-		-h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "Unknown argument '$1' (see --help)" >&2; exit 1 ;;
 	esac
 	shift
@@ -59,6 +63,20 @@ if [ "$UPLOAD" = "1" ]; then
 	if [ -z "$(git -C "$REPO" branch -r --contains "$commit" 2>/dev/null)" ]; then
 		echo "ERROR: $shorthash is not on any remote branch; push it before --upload" >&2
 		exit 1
+	fi
+	# Version = commit count, so an unchanged checkout maps to a release that is already done.
+	if [ "$CLOBBER" = "0" ]; then
+		have=$(gh release view "$version" --repo "$GH_REPO" --json assets -q '.assets[].name' 2>/dev/null || true)
+		missing=0
+		IFS=',' read -ra target_list <<< "$TARGETS"
+		for target in "${target_list[@]}"; do
+			case "$target" in linux) ext=tar.gz ;; *) ext=zip ;; esac
+			grep -qxF "mmsource-${expanded_version}-$target.$ext" <<< "$have" || missing=1
+		done
+		if [ "$missing" = "0" ]; then
+			echo "==> $version is already released with every package, nothing to do"
+			exit 0
+		fi
 	fi
 fi
 
@@ -174,7 +192,10 @@ for target in "${target_list[@]}"; do
 	esac
 done
 
-if [ "$UPLOAD" = "1" ]; then
+if [ "$DRY_RUN" = "1" ]; then
+	echo "==> (dry run) would release $version on $GH_REPO ($shorthash) with:"
+	printf '    %s\n' "${files[@]##*/}"
+elif [ "$UPLOAD" = "1" ]; then
 	branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)
 	if gh release view "$version" --repo "$GH_REPO" >/dev/null 2>&1; then
 		echo "==> Release $version exists, uploading assets"
