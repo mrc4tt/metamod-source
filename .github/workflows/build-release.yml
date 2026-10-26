@@ -173,8 +173,8 @@ jobs:
           generateReleaseNotes: true
 
           draft: false
-          prerelease: ${{ github.ref == 'refs/heads/master' }}
-          makeLatest: ${{ github.ref != 'refs/heads/master' }}
+          prerelease: false
+          makeLatest: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Output PDBs

@@ -196,13 +196,12 @@ if [ "$DRY_RUN" = "1" ]; then
 	echo "==> (dry run) would release $version on $GH_REPO ($shorthash) with:"
 	printf '    %s\n' "${files[@]##*/}"
 elif [ "$UPLOAD" = "1" ]; then
-	branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)
 	if gh release view "$version" --repo "$GH_REPO" >/dev/null 2>&1; then
 		echo "==> Release $version exists, uploading assets"
 	else
-		# Like the workflow: master builds are prereleases, x.y-dev branches are marked latest.
-		flags=(--generate-notes --target "$commit")
-		if [ "$branch" = "master" ]; then flags+=(--prerelease --latest=false); fi
+		# Every build of this fork is a full release and becomes latest (upstream marks master
+		# builds as prereleases).
+		flags=(--generate-notes --target "$commit" --latest)
 		echo "==> Creating release $version on $GH_REPO"
 		gh release create "$version" --repo "$GH_REPO" --title "$version" "${flags[@]}"
 	fi
