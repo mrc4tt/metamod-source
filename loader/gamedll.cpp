@@ -110,8 +110,16 @@ mm_DetectGameInformation()
 	char gameinfo_path[PLATFORM_MAX_PATH];
 
 	bool is_source2 = false;
-	mm_PathFormat(gameinfo_path, sizeof(gameinfo_path), "%s/gameinfo.txt", game_path);
-	if ((fp = fopen(gameinfo_path, "rt")) == NULL)
+	/* Source 2 games only use gameinfo.gi. A stray gameinfo.txt next to it
+	 * would otherwise be parsed with Source 1 path rules and find nothing. */
+	if (g_is_source2)
+		fp = NULL;
+	else
+	{
+		mm_PathFormat(gameinfo_path, sizeof(gameinfo_path), "%s/gameinfo.txt", game_path);
+		fp = fopen(gameinfo_path, "rt");
+	}
+	if (fp == NULL)
 	{
 		// Try Source2 gameinfo
 		mm_PathFormat(gameinfo_path, sizeof(gameinfo_path), "%s/gameinfo.gi", game_path);
