@@ -28,6 +28,7 @@
 #include <list>
 #include <set>
 #include <mutex>
+#include <vector>
 #include <stdio.h>
 
 #include "amtl/am-string.h"
@@ -48,7 +49,17 @@ struct Unloader {
 		// Add invalid hook, so it doesn't delete the class early
 		_khook->m_hooks.insert(KHook::INVALID_HOOK);
 
-		for (auto id : _khook->m_hooks) {
+		// Iterate a copy. HookRemoval erases from m_hooks, and it can run while this loop is
+		// still going: KHook calls it right away for an id that is no longer installed (a hook
+		// the plugin already removed itself), and from its delete thread for the others.
+		// Erasing the element a range-for is standing on invalidates the iterator.
+		std::vector<KHook::HookID_t> ids;
+		{
+			std::lock_guard<std::mutex> guard(_mutex);
+			ids.assign(_khook->m_hooks.begin(), _khook->m_hooks.end());
+		}
+
+		for (auto id : ids) {
 			if (id != KHook::INVALID_HOOK) {
 				KHook::RemoveHook(id, true, reinterpret_cast<void(*)(KHook::HookID_t,void*)>(&Unloader::HookRemoval), this);
 			}
