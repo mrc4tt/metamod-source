@@ -186,6 +186,8 @@ void CPluginManager::SetAlias(const char *alias, const char *value)
 		{
 			if (value[0] == '\0')
 			{
+				// Only the list node was freed; the alias record leaked.
+				delete p;
 				iter = m_Aliases.erase(iter);
 				return;
 			}
@@ -237,6 +239,11 @@ PluginId CPluginManager::Load(const char *file, PluginId source, bool &already, 
 			{
 				//Attempt to load the plugin again
 				already = true;
+				// Free the failed entry: erasing it alone leaked the CPlugin, its KHook wrapper and
+				// its dlopen reference (the old image stayed mapped) on every retry of a plugin that
+				// errored or was refused. Its destructor runs the Unloader (dlclose) or frees the
+				// wrapper when no library was opened.
+				delete (*i);
 				i = m_Plugins.erase(i);
 				continue;
 			}
