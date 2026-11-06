@@ -602,29 +602,59 @@ mm_PatchDllShutdown()
 }
 
 #if defined _WIN32
+// Where AllowDedicatedServers really is in the game's ISource2ServerConfig vtable.
+//
+// The ISource2ServerConfig above is the loader's own stand-in, declaring only the three
+// methods it overrides, so &ISource2ServerConfig::AllowDedicatedServers is slot 2 there and
+// says nothing about the game's class. Using that index for the game's vtable (as since
+// "Make gamedll bridge more legible") overwrote slot 2, QueryInterface, with this thunk; the
+// hardcoded 20 before it was a slot that moved on as Valve added methods (CS2's 20 is
+// GetConVarPrefixesToResetToDefaults). Either way the real AllowDedicatedServers was never
+// replaced, and a QueryInterface call on the server config got `true` back as a pointer.
+//
+// CS2: slot 19 = IAppSystem's 11 + GetGameDescription, GetNetworkVersion, GetPlayerLimits,
+// GetMaxSplitscreenPlayers, GetMaxHumanPlayers, ShouldNotifyLocalClientConnectionStateChanges,
+// OnClientFullyConnect, GetHostStateLoopModeInfo (hl2sdk cs2 isource2serverconfig.h).
+// Checked on build 14196: server.dll's CCSGameConfiguration vtable at the ISource2ServerConfig
+// subobject (COL offset 8) has `mov al, 1; ret` in slot 19, and engine2's
+// CLoopTypeClientServer::AllocateLoopMode calls [vtable+0x98] with GetSteamUniverse() and
+// shuts down on false. Other games' layouts are not known here, so they are left alone.
+static int
+mm_AllowDedicatedIndex()
+{
+	if (stricmp("csgo", game_name) == 0)
+		return 19;
+	return -1;
+}
+
 static void
 mm_PatchAllowDedicated(bool patch)
 {
-	std::int32_t is2sc_allowdedi_index = KHook::GetVtableIndex(&ISource2ServerConfig::AllowDedicatedServers);
-	assert(is2sc_allowdedi_index != -1);
+	const int dest_index = mm_AllowDedicatedIndex();
+	if (dest_index < 0)
+		return;
+
+	// The thunk's own slot, in the loader's stand-in class.
+	std::int32_t src_index = KHook::GetVtableIndex(&ISource2ServerConfig::AllowDedicatedServers);
+	assert(src_index != -1);
 
 	auto vtable_src = *(void***) &is2sc_thunk;
 	auto vtable_dest = *(void ***) config_iface;
 
-	KHook::Memory::SetAccess(&vtable_dest[is2sc_allowdedi_index],
+	KHook::Memory::SetAccess(&vtable_dest[dest_index],
 		sizeof(void*),
 		KHook::Memory::Flags::READ | KHook::Memory::Flags::WRITE | KHook::Memory::Flags::EXECUTE);
 
 	if (patch)
 	{
 		assert(is2sc_orig_allowdedi == NULL);
-		is2sc_orig_allowdedi = vtable_dest[is2sc_allowdedi_index];
-		vtable_dest[is2sc_allowdedi_index] = vtable_src[is2sc_allowdedi_index];
+		is2sc_orig_allowdedi = vtable_dest[dest_index];
+		vtable_dest[dest_index] = vtable_src[src_index];
 	}
 	else
 	{
 		assert(is2sc_orig_allowdedi != NULL);
-		vtable_dest[is2sc_allowdedi_index] = is2sc_orig_allowdedi;
+		vtable_dest[dest_index] = is2sc_orig_allowdedi;
 		is2sc_orig_allowdedi = NULL;
 	}
 }
