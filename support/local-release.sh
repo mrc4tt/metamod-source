@@ -3,18 +3,25 @@
 # Linux and Windows in Docker on this machine and, with --upload, publishes the
 # packages to this fork's GitHub releases.
 #
-# Usage: support/local-release.sh [--upload|--dry-run] [--clobber] [--targets linux,windows] [--sdks cs2]
+# Usage: support/local-release.sh [--upload|--dry-run] [--clobber] [--no-smoke] [--targets linux,windows] [--sdks cs2]
 #
 #   --upload    create/update the GitHub release for this version and attach the packages;
 #               does nothing when that release already has every package
 #   --dry-run   like --upload, but only builds and prints what would be released
 #   --clobber   with --upload, replace assets that already exist on the release
+#   --no-smoke  release without the smoke test (below)
 #   --targets   comma list of linux,windows (default: both)
 #   --sdks      comma list for configure.py --sdks (default: cs2)
 #
 # Linux builds in the same container the workflow uses (debian11-clang22). Windows builds
 # with real MSVC under Wine (the msvc-wine image from cs2-build-system/msvc-wine-runner):
 # AMBuild only picks MSVC on a Windows host, so it runs under a Windows Python there.
+#
+# Smoke test: with --upload or --dry-run the Linux package is booted on a CS2 dedicated
+# server first (server-ops' cs2-plugin-smoke --metamod, on the RE server): the server has to
+# come up, `meta version` has to show this build and it has to shut down cleanly. A failed
+# test, or a release without a Linux build, publishes nothing. Where cs2-plugin-smoke is not
+# installed the test is skipped with a warning.
 #
 # Output: build-release/mmsource-<version>-git<rev>-{linux.tar.gz,windows.zip}
 # Cache:  ${XDG_CACHE_HOME:-~/.cache}/mms-local-release (SDKs, AMBuild, Windows Python)
@@ -23,6 +30,7 @@ set -euo pipefail
 UPLOAD=0
 DRY_RUN=0
 CLOBBER=0
+SMOKE=1
 TARGETS="linux,windows"
 SDKS="cs2"
 while [ $# -gt 0 ]; do
@@ -30,9 +38,10 @@ while [ $# -gt 0 ]; do
 		--upload)  UPLOAD=1 ;;
 		--dry-run) UPLOAD=1; DRY_RUN=1 ;;
 		--clobber) CLOBBER=1 ;;
+		--no-smoke) SMOKE=0 ;;
 		--targets) TARGETS="$2"; shift ;;
 		--sdks)    SDKS="$2"; shift ;;
-		-h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "Unknown argument '$1' (see --help)" >&2; exit 1 ;;
 	esac
 	shift
@@ -191,6 +200,24 @@ for target in "${target_list[@]}"; do
 		*) echo "Unknown target '$target' (use linux, windows)" >&2; exit 1 ;;
 	esac
 done
+
+# Nothing is published before the Linux build has booted a CS2 server.
+if [ "$UPLOAD" = "1" ] && [ "$SMOKE" = "1" ]; then
+	linux_file="$OUT/mmsource-${expanded_version}-linux.tar.gz"
+	if ! command -v cs2-plugin-smoke >/dev/null 2>&1; then
+		echo "WARNING: cs2-plugin-smoke is not installed here, smoke test skipped" >&2
+	elif [[ " ${files[*]} " != *" $linux_file "* ]]; then
+		echo "ERROR: no Linux build in this run, so nothing to smoke-test; add linux to --targets or pass --no-smoke" >&2
+		exit 1
+	else
+		echo "==> Smoke test"
+		cs2-plugin-smoke --name metamod-source --metamod "$linux_file" \
+			--expect-version "$(cat "$REPO/product.version")+${version_rev}" || {
+			echo "ERROR: smoke test failed, nothing released" >&2
+			exit 1
+		}
+	fi
+fi
 
 if [ "$DRY_RUN" = "1" ]; then
 	echo "==> (dry run) would release $version on $GH_REPO ($shorthash) with:"
